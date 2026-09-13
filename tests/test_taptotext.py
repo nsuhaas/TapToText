@@ -10,6 +10,7 @@ import sys
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 import taptotext
+import taptotext_widget
 
 
 class MultipartTests(unittest.TestCase):
@@ -130,6 +131,18 @@ class OfflineHelperTests(unittest.TestCase):
             self.assertEqual(records[0]["custom_terms"], "TapToText")
         taptotext.APP_DIR = old_app_dir
         taptotext.HISTORY_PATH = old_history_path
+
+
+class WidgetGeometryTests(unittest.TestCase):
+    def test_saved_small_widget_geometry_expands_to_fit_controls(self):
+        geometry = taptotext_widget.normalize_widget_geometry("264x118+80+120")
+
+        self.assertEqual(geometry, "480x136+80+120")
+
+    def test_valid_larger_widget_geometry_is_preserved(self):
+        geometry = taptotext_widget.normalize_widget_geometry("500x160+12+34")
+
+        self.assertEqual(geometry, "500x160+12+34")
 
 
 if __name__ == "__main__":

@@ -6,6 +6,7 @@ from datetime import datetime
 import json
 import os
 from pathlib import Path
+import re
 import shutil
 import subprocess
 import sys
@@ -30,6 +31,10 @@ BUTTON_IDLE = "#111827"
 BUTTON_IDLE_ACTIVE = "#374151"
 BUTTON_RECORDING = "#b91c1c"
 BUTTON_RECORDING_ACTIVE = "#991b1b"
+WIDGET_MIN_WIDTH = 480
+WIDGET_MIN_HEIGHT = 136
+DEFAULT_WIDGET_GEOMETRY = f"{WIDGET_MIN_WIDTH}x{WIDGET_MIN_HEIGHT}+80+120"
+GEOMETRY_PATTERN = re.compile(r"^(\d+)x(\d+)((?:[+-]\d+){2})?$")
 
 DEFAULT_CONFIG = {
     "offline_first_version": 2,
@@ -46,8 +51,22 @@ DEFAULT_CONFIG = {
     "paste": True,
     "delete_audio": False,
     "always_on_top": True,
-    "widget_geometry": "264x118+80+120",
+    "widget_geometry": DEFAULT_WIDGET_GEOMETRY,
 }
+
+
+def normalize_widget_geometry(geometry):
+    if not isinstance(geometry, str):
+        return DEFAULT_WIDGET_GEOMETRY
+
+    match = GEOMETRY_PATTERN.match(geometry)
+    if not match:
+        return DEFAULT_WIDGET_GEOMETRY
+
+    width = max(int(match.group(1)), WIDGET_MIN_WIDTH)
+    height = max(int(match.group(2)), WIDGET_MIN_HEIGHT)
+    position = match.group(3) or "+80+120"
+    return f"{width}x{height}{position}"
 
 
 def load_config():
@@ -190,7 +209,7 @@ class TapToTextWidget:
 
     def build_window(self):
         self.root.title(APP_NAME)
-        self.root.geometry(self.config.get("widget_geometry", "264x118+80+120"))
+        self.root.geometry(normalize_widget_geometry(self.config.get("widget_geometry")))
         self.root.resizable(False, False)
         self.root.overrideredirect(True)
         self.root.configure(bg=WIDGET_BORDER)
@@ -217,50 +236,32 @@ class TapToTextWidget:
         title.bind("<B1-Motion>", self.drag_widget)
         title.bind("<ButtonRelease-1>", self.save_widget_position)
 
-        settings = tk.Button(
-            header,
-            text="S",
-            command=self.open_settings,
-            relief=tk.FLAT,
-            bg="#e5e7eb",
-            activebackground="#d1d5db",
-            fg=TEXT_DARK,
-            width=2,
-            height=1,
-            padx=0,
-            pady=0,
-        )
-        settings.pack(side=tk.RIGHT)
+        actions = tk.Frame(header, bg=WIDGET_BG)
+        actions.pack(side=tk.RIGHT)
 
-        history = tk.Button(
-            header,
-            text="H",
-            command=self.open_history,
-            relief=tk.FLAT,
-            bg="#e5e7eb",
-            activebackground="#d1d5db",
-            fg=TEXT_DARK,
-            width=2,
-            height=1,
-            padx=0,
-            pady=0,
-        )
-        history.pack(side=tk.RIGHT, padx=(0, 6))
-
-        close = tk.Button(
-            header,
-            text="X",
-            command=self.close,
-            relief=tk.FLAT,
-            bg="#e5e7eb",
-            activebackground="#d1d5db",
-            fg=TEXT_DARK,
-            width=2,
-            height=1,
-            padx=0,
-            pady=0,
-        )
-        close.pack(side=tk.RIGHT, padx=(0, 6))
+        for label, width, command in (
+            ("History", 9, self.open_history),
+            ("Settings", 10, self.open_settings),
+            ("Quit", 6, self.close),
+        ):
+            action = tk.Button(
+                actions,
+                text=label,
+                command=command,
+                relief=tk.FLAT,
+                bg="#e5e7eb",
+                activebackground="#d1d5db",
+                fg=TEXT_DARK,
+                activeforeground=TEXT_DARK,
+                font=("Helvetica Neue", 10, "bold"),
+                width=width,
+                height=1,
+                padx=1,
+                pady=1,
+                borderwidth=0,
+                highlightthickness=0,
+            )
+            action.pack(side=tk.LEFT, padx=(0, 6))
 
         self.tap_button = tk.Button(
             self.container,

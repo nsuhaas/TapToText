@@ -92,8 +92,8 @@ open /Users/suhaasn/ST/TapToText/TapToText.app
 ```
 
 The widget does not show a normal Dock app window. It appears as a small
-always-on-top panel that you can drag by its top bar. Use `S` for settings, `H`
-for history, and `X` to quit.
+always-on-top panel that you can drag by its top bar. Use `Settings`, `History`,
+and `Quit` from the top row.
 
 Click `Tap` once to start recording and click `Stop` to finish. After
 transcription, the text is copied or pasted based on the saved settings.
