@@ -96,6 +96,42 @@ class OfflineHelperTests(unittest.TestCase):
         )
         self.assertEqual(text, "TapToText should paste this into VS Code.")
 
+    def test_voice_commands_and_cleanup_format_transcript(self):
+        text = taptotext.postprocess_transcript(
+            "um hello comma world period new paragraph i am ready",
+            "TapToText, Whisper",
+        )
+
+        self.assertEqual(text, "Hello, world.\n\nI am ready")
+
+    def test_revision_command_removes_previous_fragment(self):
+        text = taptotext.postprocess_transcript(
+            "send the draft scratch that send the final version period",
+            "TapToText, Whisper",
+        )
+
+        self.assertEqual(text, "Send the final version.")
+
+    def test_cleanup_can_be_disabled(self):
+        text = taptotext.postprocess_transcript(
+            "hello comma world",
+            "TapToText, Whisper",
+            smart_cleanup=False,
+            voice_commands=False,
+        )
+
+        self.assertEqual(text, "hello comma world")
+
+    def test_search_history_records_matches_all_terms(self):
+        records = [
+            {"text": "meeting notes about offline dictation", "backend": "whisper-cli"},
+            {"text": "draft email", "backend": "openai"},
+        ]
+
+        matches = taptotext.search_history_records(records, "offline whisper")
+
+        self.assertEqual(matches, [records[0]])
+
     def test_deliver_text_reports_paste_block_after_copy(self):
         with mock.patch.object(taptotext, "copy_to_clipboard") as copy_mock:
             with mock.patch.object(

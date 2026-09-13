@@ -5,9 +5,10 @@ workflow: trigger recording, speak, stop recording, then copy or paste the
 transcript into the active app.
 
 It records through `ffmpeg`, transcribes through a local `whisper` CLI by
-default, stores transcript history locally, and uses macOS clipboard tools for
-delivery. The OpenAI backend still exists as an optional fallback, but the main
-project does not require APIs or billing.
+default, cleans the transcript with local post-processing, supports spoken
+dictation commands, stores searchable transcript history locally, and uses macOS
+clipboard tools for delivery. The OpenAI backend still exists as an optional
+fallback, but the main project does not require APIs or billing.
 
 ## Screenshot
 
@@ -115,6 +116,8 @@ Open `Settings` in the widget to set:
 - Local model folder
 - Custom terms, such as names, product names, and technical terms
 - Paste behavior
+- Smart cleanup for filler words, repeated words, spacing, and capitalization
+- Spoken commands such as `comma`, `period`, and `new paragraph`
 - Always-on-top behavior
 - OpenAI API key, only if you intentionally choose the OpenAI backend
 
@@ -136,6 +139,27 @@ The app launcher writes logs to:
 ```bash
 ~/.taptotext/widget.log
 ```
+
+## Smart Dictation
+
+TapToText adds a local cleanup layer after Whisper transcription. It can remove
+common filler words, collapse repeated words, fix punctuation spacing, and
+capitalize sentence starts.
+
+It also handles spoken dictation commands:
+
+```text
+comma
+period
+question mark
+new line
+new paragraph
+bullet point
+scratch that
+```
+
+The `History` window includes local search across saved transcripts, timestamps,
+backend names, models, and actions. No transcript search data leaves your Mac.
 
 ## Global Hotkey Mode
 
@@ -191,6 +215,8 @@ python taptotext.py --once --backend openai --model gpt-transcribe
 --custom-terms "TapToText, Whisper"
 --delete-audio
 --output-dir ~/.taptotext/recordings
+--no-smart-cleanup
+--no-voice-commands
 ```
 
 ## Resume Angle
@@ -199,8 +225,9 @@ TapToText is designed to be presented as a local-first productivity tool:
 
 ```text
 Built a local-first macOS dictation app with offline speech recognition,
-floating widget UI, clipboard automation, configurable microphone settings,
-custom vocabulary biasing, and privacy-preserving transcript history.
+floating widget UI, spoken command parsing, smart transcript cleanup, clipboard
+automation, configurable microphone settings, custom vocabulary biasing, and
+privacy-preserving transcript history search.
 ```
 
 ## Troubleshooting

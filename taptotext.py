@@ -27,6 +27,26 @@ DEFAULT_CUSTOM_TERMS = "TapToText, Whisper, Codex, Wispr Flow"
 DEFAULT_HOTKEY = "<cmd>+<shift>+space"
 APP_DIR = Path.home() / ".taptotext"
 HISTORY_PATH = APP_DIR / "history.jsonl"
+VOICE_COMMAND_REPLACEMENTS = (
+    (r"\bnew paragraph\b", "\n\n"),
+    (r"\bnew line\b", "\n"),
+    (r"\bnext line\b", "\n"),
+    (r"\bbullet point\b", "\n- "),
+    (r"\bnew bullet\b", "\n- "),
+    (r"\bcomma\b", ","),
+    (r"\bperiod\b", "."),
+    (r"\bfull stop\b", "."),
+    (r"\bquestion mark\b", "?"),
+    (r"\bexclamation (?:mark|point)\b", "!"),
+    (r"\bcolon\b", ":"),
+    (r"\bsemicolon\b", ";"),
+    (r"\bdash\b", " - "),
+    (r"\bhyphen\b", "-"),
+    (r"\bopen quote\b", '"'),
+    (r"\bclose quote\b", '"'),
+    (r"\bopen parenthesis\b", "("),
+    (r"\bclose parenthesis\b", ")"),
+)
 IGNORED_FFMPEG_WARNINGS = (
     "AVCaptureDeviceTypeExternal",
     "AVCaptureDeviceTypeContinuityCamera",
@@ -134,10 +154,104 @@ def looks_like_custom_terms_echo(text, custom_terms):
     return bool(text_norm and text_norm == terms_norm)
 
 
-def postprocess_transcript(text, custom_terms=None):
+def apply_revision_commands(text):
+    clean = text.strip()
+    pattern = re.compile(r"\b(?:scratch that|delete that)\b", re.IGNORECASE)
+    match = pattern.search(clean)
+    while match:
+        prefix = clean[: match.start()].rstrip()
+        suffix = clean[match.end() :].lstrip(" ,.;:!?")
+        last_boundary = max(
+            prefix.rfind("."),
+            prefix.rfind("!"),
+            prefix.rfind("?"),
+            prefix.rfind("\n"),
+        )
+        if last_boundary >= 0:
+            prefix = prefix[: last_boundary + 1].rstrip()
+        else:
+            prefix = ""
+        clean = " ".join(part for part in (prefix, suffix) if part).strip()
+        match = pattern.search(clean)
+    return clean
+
+
+def apply_voice_commands(text):
+    clean = text.strip()
+    for pattern, replacement in VOICE_COMMAND_REPLACEMENTS:
+        clean = re.sub(pattern, replacement, clean, flags=re.IGNORECASE)
+    return clean.strip()
+
+
+def remove_filler_words(text):
+    clean = re.sub(r"(?i)\b(?:um+|uh+|erm|er|ah|hmm)\b[,\s]*", "", text)
+    clean = re.sub(r"(?i)\b(?:you know|i mean)\b[,\s]*", "", clean)
+    return clean
+
+
+def collapse_repeated_words(text):
+    previous = None
+    clean = text
+    pattern = re.compile(r"\b([A-Za-z][A-Za-z']*)\b(\s+\1\b)+", re.IGNORECASE)
+    while previous != clean:
+        previous = clean
+        clean = pattern.sub(r"\1", clean)
+    return clean
+
+
+def normalize_transcript_spacing(text):
+    clean = text.replace("\r\n", "\n").replace("\r", "\n")
+    clean = re.sub(r"[ \t]+", " ", clean)
+    clean = re.sub(r" *\n *", "\n", clean)
+    clean = re.sub(r"\n{3,}", "\n\n", clean)
+    clean = re.sub(r"\s+([,.;:!?])", r"\1", clean)
+    clean = re.sub(r"([,;:])(?=\S)", r"\1 ", clean)
+    clean = re.sub(r"([.!?])(?=\S)", r"\1 ", clean)
+    clean = re.sub(r"\(\s+", "(", clean)
+    clean = re.sub(r"\s+\)", ")", clean)
+    clean = re.sub(r" {2,}", " ", clean)
+    return clean.strip()
+
+
+def capitalize_sentence_starts(text):
+    chars = []
+    capitalize_next = True
+    for char in text:
+        if capitalize_next and char.isalpha():
+            chars.append(char.upper())
+            capitalize_next = False
+            continue
+
+        chars.append(char)
+        if char in ".!?\n":
+            capitalize_next = True
+        elif not char.isspace() and char not in '"([{-':
+            capitalize_next = False
+
+    clean = "".join(chars)
+    clean = re.sub(r"\bi\b", "I", clean)
+    return clean
+
+
+def cleanup_transcript_text(text):
+    clean = remove_filler_words(text)
+    clean = collapse_repeated_words(clean)
+    clean = normalize_transcript_spacing(clean)
+    clean = capitalize_sentence_starts(clean)
+    return clean
+
+
+def postprocess_transcript(text, custom_terms=None, smart_cleanup=True, voice_commands=True):
     clean = text.strip()
     if looks_like_custom_terms_echo(clean, custom_terms):
         return ""
+    if voice_commands:
+        clean = apply_revision_commands(clean)
+        clean = apply_voice_commands(clean)
+    if smart_cleanup:
+        clean = cleanup_transcript_text(clean)
+    elif voice_commands:
+        clean = normalize_transcript_spacing(clean)
     return clean
 
 
@@ -270,6 +384,8 @@ def transcribe_with_whisper_cli(audio_path, model, language, prompt, timeout, mo
 
 def transcribe_audio(audio_path, args):
     custom_terms = getattr(args, "custom_terms", None)
+    smart_cleanup = bool(getattr(args, "smart_cleanup", True))
+    voice_commands = bool(getattr(args, "voice_commands", True))
     prompt = build_initial_prompt(
         getattr(args, "prompt", None),
         custom_terms,
@@ -282,7 +398,7 @@ def transcribe_audio(audio_path, args):
             prompt=prompt,
             timeout=args.timeout,
         )
-        return postprocess_transcript(text, custom_terms)
+        return postprocess_transcript(text, custom_terms, smart_cleanup, voice_commands)
     if args.backend == "whisper-cli":
         text = transcribe_with_whisper_cli(
             audio_path=audio_path,
@@ -292,7 +408,7 @@ def transcribe_audio(audio_path, args):
             timeout=args.timeout,
             model_dir=getattr(args, "model_dir", None),
         )
-        return postprocess_transcript(text, custom_terms)
+        return postprocess_transcript(text, custom_terms, smart_cleanup, voice_commands)
     raise TapToTextError(f"Unknown backend: {args.backend}")
 
 
@@ -310,6 +426,8 @@ def append_history(text, audio_path, args, action):
         "model_dir": getattr(args, "model_dir", "") or "",
         "action": action,
         "pasted": bool(getattr(args, "paste", False)),
+        "smart_cleanup": bool(getattr(args, "smart_cleanup", True)),
+        "voice_commands": bool(getattr(args, "voice_commands", True)),
     }
     with HISTORY_PATH.open("a", encoding="utf-8") as file:
         file.write(json.dumps(record, ensure_ascii=True) + "\n")
@@ -330,6 +448,22 @@ def load_history(limit=50):
             if isinstance(record, dict):
                 records.append(record)
     return records[-limit:][::-1]
+
+
+def search_history_records(records, query):
+    terms = [term.casefold() for term in str(query or "").split() if term.strip()]
+    if not terms:
+        return list(records)
+
+    matches = []
+    for record in records:
+        haystack = " ".join(
+            str(record.get(key, ""))
+            for key in ("timestamp", "text", "backend", "model", "language", "prompt", "action")
+        ).casefold()
+        if all(term in haystack for term in terms):
+            matches.append(record)
+    return matches
 
 
 def clear_history():
@@ -697,6 +831,20 @@ def build_parser():
         "--delete-audio",
         action="store_true",
         help="delete each WAV file after successful transcription",
+    )
+    parser.add_argument(
+        "--no-smart-cleanup",
+        action="store_false",
+        dest="smart_cleanup",
+        default=True,
+        help="leave filler words, repeated words, casing, and punctuation spacing unchanged",
+    )
+    parser.add_argument(
+        "--no-voice-commands",
+        action="store_false",
+        dest="voice_commands",
+        default=True,
+        help="do not convert spoken commands like comma, period, or new paragraph",
     )
     parser.add_argument(
         "--no-history",

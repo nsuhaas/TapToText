@@ -37,7 +37,7 @@ DEFAULT_WIDGET_GEOMETRY = f"{WIDGET_MIN_WIDTH}x{WIDGET_MIN_HEIGHT}+80+120"
 GEOMETRY_PATTERN = re.compile(r"^(\d+)x(\d+)((?:[+-]\d+){2})?$")
 
 DEFAULT_CONFIG = {
-    "offline_first_version": 2,
+    "offline_first_version": 3,
     "backend": "whisper-cli",
     "model": taptotext.DEFAULT_LOCAL_MODEL,
     "model_dir": "~/.taptotext/models",
@@ -50,6 +50,8 @@ DEFAULT_CONFIG = {
     "output_dir": "~/.taptotext/recordings",
     "paste": True,
     "delete_audio": False,
+    "smart_cleanup": True,
+    "voice_commands": True,
     "always_on_top": True,
     "widget_geometry": DEFAULT_WIDGET_GEOMETRY,
 }
@@ -84,12 +86,12 @@ def load_config():
         if loaded.get("offline_first_version") is None and config["backend"] == "openai":
             config["backend"] = "whisper-cli"
             config["model"] = taptotext.DEFAULT_LOCAL_MODEL
-        if loaded.get("offline_first_version", 0) < 2:
+        if loaded.get("offline_first_version", 0) < 3:
             if not config.get("language"):
                 config["language"] = taptotext.DEFAULT_LANGUAGE
             if not config.get("custom_terms"):
                 config["custom_terms"] = taptotext.DEFAULT_CUSTOM_TERMS
-            config["offline_first_version"] = 2
+            config["offline_first_version"] = 3
     return config
 
 
@@ -181,6 +183,8 @@ def build_args(config):
         output_dir=config["output_dir"],
         delete_audio=bool(config["delete_audio"]),
         paste=bool(config["paste"]),
+        smart_cleanup=bool(config.get("smart_cleanup", True)),
+        voice_commands=bool(config.get("voice_commands", True)),
         no_history=False,
         hotkey="",
     )
@@ -534,7 +538,7 @@ class SettingsWindow:
         self.app = app
         self.window = tk.Toplevel(app.root)
         self.window.title(f"{APP_NAME} Settings")
-        self.window.geometry("470x545+120+160")
+        self.window.geometry("470x610+120+160")
         self.window.configure(bg=WIDGET_BG)
         self.window.transient(app.root)
 
@@ -552,6 +556,8 @@ class SettingsWindow:
             "api_key": tk.StringVar(value=""),
             "paste": tk.BooleanVar(value=bool(app.config["paste"])),
             "delete_audio": tk.BooleanVar(value=bool(app.config["delete_audio"])),
+            "smart_cleanup": tk.BooleanVar(value=bool(app.config.get("smart_cleanup", True))),
+            "voice_commands": tk.BooleanVar(value=bool(app.config.get("voice_commands", True))),
             "always_on_top": tk.BooleanVar(value=bool(app.config["always_on_top"])),
         }
 
@@ -586,6 +592,20 @@ class SettingsWindow:
             checks,
             text="Delete audio after success",
             variable=self.vars["delete_audio"],
+            bg="#f7f8fa",
+            anchor="w",
+        ).pack(fill=tk.X)
+        tk.Checkbutton(
+            checks,
+            text="Smart cleanup",
+            variable=self.vars["smart_cleanup"],
+            bg="#f7f8fa",
+            anchor="w",
+        ).pack(fill=tk.X)
+        tk.Checkbutton(
+            checks,
+            text="Spoken commands",
+            variable=self.vars["voice_commands"],
             bg="#f7f8fa",
             anchor="w",
         ).pack(fill=tk.X)
@@ -650,6 +670,8 @@ class SettingsWindow:
                 "output_dir": self.vars["output_dir"].get().strip() or "~/.taptotext/recordings",
                 "paste": bool(self.vars["paste"].get()),
                 "delete_audio": bool(self.vars["delete_audio"].get()),
+                "smart_cleanup": bool(self.vars["smart_cleanup"].get()),
+                "voice_commands": bool(self.vars["voice_commands"].get()),
                 "always_on_top": bool(self.vars["always_on_top"].get()),
                 "widget_geometry": self.app.root.geometry(),
             }
@@ -729,7 +751,9 @@ class SettingsWindow:
 class HistoryWindow:
     def __init__(self, app):
         self.app = app
-        self.records = taptotext.load_history(limit=100)
+        self.all_records = taptotext.load_history(limit=500)
+        self.records = list(self.all_records)
+        self.search_var = tk.StringVar(value="")
         self.window = tk.Toplevel(app.root)
         self.window.title(f"{APP_NAME} History")
         self.window.geometry("760x460+140+180")
@@ -743,6 +767,15 @@ class HistoryWindow:
 
         left = tk.Frame(frame, bg="#f7f8fa")
         left.pack(side=tk.LEFT, fill=tk.Y)
+
+        search_row = tk.Frame(left, bg="#f7f8fa")
+        search_row.pack(fill=tk.X, pady=(0, 8))
+        tk.Label(search_row, text="Search", bg="#f7f8fa", fg="#111827", anchor="w").pack(
+            fill=tk.X
+        )
+        search = tk.Entry(search_row, textvariable=self.search_var)
+        search.pack(fill=tk.X)
+        search.bind("<KeyRelease>", self.filter_records)
 
         self.listbox = tk.Listbox(left, width=36, height=20, exportselection=False)
         self.listbox.pack(fill=tk.Y, expand=False)
@@ -766,12 +799,20 @@ class HistoryWindow:
 
         self.populate()
 
+    def filter_records(self, _event=None):
+        self.records = taptotext.search_history_records(self.all_records, self.search_var.get())
+        self.populate()
+
     def populate(self):
         self.listbox.delete(0, tk.END)
         self.text.delete("1.0", tk.END)
-        if not self.records:
+        if not self.all_records:
             self.listbox.insert(tk.END, "No transcripts yet")
             self.text.insert("1.0", "Transcripts will appear here after you use TapToText.")
+            return
+        if not self.records:
+            self.listbox.insert(tk.END, "No matches")
+            self.text.insert("1.0", "No local transcripts matched your search.")
             return
 
         for record in self.records:
@@ -833,6 +874,7 @@ class HistoryWindow:
         if not messagebox.askyesno(APP_NAME, "Clear all local transcript history?"):
             return
         taptotext.clear_history()
+        self.all_records = []
         self.records = []
         self.populate()
         self.app.set_idle("History cleared")
