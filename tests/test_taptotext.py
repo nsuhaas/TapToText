@@ -76,23 +76,23 @@ class OfflineHelperTests(unittest.TestCase):
     def test_build_initial_prompt_combines_custom_terms_and_prompt(self):
         prompt = taptotext.build_initial_prompt(
             prompt="Use concise punctuation.",
-            custom_terms="Suhaas, ShopOS\nGenpact, suhaas",
+            custom_terms="TapToText, Whisper\nCodex, taptotext",
         )
 
-        self.assertIn("Suhaas", prompt)
-        self.assertIn("ShopOS", prompt)
-        self.assertIn("Genpact", prompt)
-        self.assertEqual(prompt.count("Suhaas"), 1)
+        self.assertIn("TapToText", prompt)
+        self.assertIn("Whisper", prompt)
+        self.assertIn("Codex", prompt)
+        self.assertEqual(prompt.count("TapToText"), 1)
         self.assertIn("Use concise punctuation.", prompt)
 
     def test_custom_terms_echo_is_removed(self):
-        text = taptotext.postprocess_transcript("TapToText, Suhaas.", "TapToText, Suhaas")
+        text = taptotext.postprocess_transcript("TapToText, Whisper.", "TapToText, Whisper")
         self.assertEqual(text, "")
 
     def test_custom_terms_plus_real_speech_is_kept(self):
         text = taptotext.postprocess_transcript(
             "TapToText should paste this into VS Code.",
-            "TapToText, Suhaas",
+            "TapToText, Whisper",
         )
         self.assertEqual(text, "TapToText should paste this into VS Code.")
 

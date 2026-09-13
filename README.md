@@ -187,8 +187,8 @@ python taptotext.py --once --backend openai --model gpt-transcribe
 
 ```bash
 --language en
---prompt "Names: Suhaas, ShopOS, Genpact. Use concise punctuation."
---custom-terms "Suhaas, ShopOS, Genpact"
+--prompt "Use concise punctuation."
+--custom-terms "TapToText, Whisper"
 --delete-audio
 --output-dir ~/.taptotext/recordings
 ```
