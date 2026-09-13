@@ -9,19 +9,11 @@ default, stores transcript history locally, and uses macOS clipboard tools for
 delivery. The OpenAI backend still exists as an optional fallback, but the main
 project does not require APIs or billing.
 
-## Screenshots
+## Screenshot
 
 ### Floating Widget
 
 ![TapToText floating widget](docs/screenshots/widget.png)
-
-### Offline Settings
-
-![TapToText offline settings](docs/screenshots/settings.png)
-
-### Transcript History
-
-![TapToText transcript history](docs/screenshots/history.png)
 
 ## Setup
 
